@@ -17,7 +17,7 @@ var (
 	// password = flag.String("p", "", "password")
 )
 
-func run() int {
+func sshrun() int {
 	flag.Parse()
 	if flag.NArg() == 0 {
 		flag.Usage()
@@ -76,8 +76,71 @@ func run() int {
 	return 0
 }
 
+func scp() int {
+	flag.Parse()
+	if flag.NArg() == 0 {
+		flag.Usage()
+		return 2
+	}
+
+	privateKey, err := ioutil.ReadFile(flag.Arg(0))
+	if err != nil {
+		panic(err)
+	}
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	if err != nil {
+		panic(err)
+	}
+	config := &ssh.ClientConfig{
+		User: *user,
+		Auth: []ssh.AuthMethod{
+			// ssh.Password(*password),
+			ssh.PublicKeys(signer),
+		},
+		Timeout:         5 * time.Second,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
+	hostport := fmt.Sprintf("%s:%d", flag.Arg(1), *port)
+	conn, err := ssh.Dial("tcp", hostport, config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cannot connect %v: %v", hostport, err)
+		return 1
+	}
+	defer conn.Close()
+
+	session, err := conn.NewSession()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cannot open new session: %v", err)
+		return 1
+	}
+	defer session.Close()
+
+	// session.Stdout = os.Stdout
+	// session.Stderr = os.Stderr
+	// session.Stdin = os.Stdin
+	go func() {
+		w, _ := session.StdinPipe()
+		defer w.Close()
+		content := "123456789\n"
+		fmt.Fprintln(w, "D0755", 0, "testdir") // mkdir
+		fmt.Fprintln(w, "C0644", len(content), "testfile1")
+		fmt.Fprint(w, content)
+		fmt.Fprint(w, "\x00") // transfer end with \x00
+		fmt.Fprintln(w, "C0644", len(content), "testfile2")
+		fmt.Fprint(w, content)
+		fmt.Fprint(w, "\x00")
+	}()
+	if err := session.Run("/usr/bin/scp -tr ./"); err != nil {
+		panic("Failed to run: " + err.Error())
+	}
+
+	return 0
+}
+
 func main() {
-	os.Exit(run())
+	// os.Exit(sshrun())
+	os.Exit(scp())
 }
 
 func CopyFile() {
