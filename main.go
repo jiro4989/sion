@@ -116,14 +116,14 @@ func scp() int {
 	}
 	defer session.Close()
 
-	// session.Stdout = os.Stdout
-	// session.Stderr = os.Stderr
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
 	// session.Stdin = os.Stdin
 	go func() {
 		w, _ := session.StdinPipe()
 		defer w.Close()
 		content := "123456789\n"
-		fmt.Fprintln(w, "D0755", 0, "testdir") // mkdir
+		//fmt.Fprintln(w, "D0755", 0, "testdir") // mkdir
 		fmt.Fprintln(w, "C0644", len(content), "testfile1")
 		fmt.Fprint(w, content)
 		fmt.Fprint(w, "\x00") // transfer end with \x00
