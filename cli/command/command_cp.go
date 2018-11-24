@@ -75,6 +75,8 @@ var cpCommand = &cobra.Command{
 		defer conn.Close()
 
 		if err := remote.WithOpenFile(conn, dstFilePath, func(f *sftp.File) error {
+			// gotoでスキップされる間に初めて宣言される変数が存在するとコンパイ
+			// ルエラーになるため、不本意ながらも先頭にまとめて変数宣言
 			var (
 				uid      uint32
 				gid      uint32
