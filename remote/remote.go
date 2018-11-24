@@ -39,7 +39,7 @@ func CreateConnection(config *SSHConfig) (*ssh.Client, error) {
 	return conn, nil
 }
 
-func WithOpenRemoteFile(conn *ssh.Client, targetPath string, fn func(*sftp.File) error) error {
+func WithOpenFile(conn *ssh.Client, targetPath string, fn func(*sftp.File) error) error {
 	sftp, err := sftp.NewClient(conn)
 	if err != nil {
 		return err

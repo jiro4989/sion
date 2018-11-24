@@ -53,7 +53,7 @@ var cpCommand = &cobra.Command{
 		}
 		defer conn.Close()
 
-		if err := remote.WithOpenRemoteFile(conn, "/home/ec2-user/tmpfile.txt", func(f *sftp.File) error {
+		if err := remote.WithOpenFile(conn, "/home/ec2-user/tmpfile.txt", func(f *sftp.File) error {
 			stat, err := f.Stat()
 			if err != nil {
 				panic(err)
@@ -61,6 +61,8 @@ var cpCommand = &cobra.Command{
 			fmt.Println("Stat:", stat)
 			fmt.Println("Mode:", stat.Mode())
 			fmt.Println("Size:", stat.Size())
+			fmt.Println("Sys uid:", stat.Sys().(*sftp.FileStat).UID)
+			fmt.Println("Sys gid:", stat.Sys().(*sftp.FileStat).GID)
 
 			var b = make([]byte, stat.Size())
 			n, err := f.Read(b)
