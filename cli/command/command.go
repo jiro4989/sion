@@ -16,6 +16,5 @@ var CommandCommand = &cobra.Command{
 }
 
 func init() {
-	fmt.Println("command.go init")
 	RootCommand.AddCommand(CommandCommand)
 }
