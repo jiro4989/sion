@@ -1,15 +1,7 @@
 package main
 
 import (
-	"flag"
-
 	"github.com/jiro4989/sion/cli/command"
-)
-
-var (
-	user = flag.String("u", "", "user")
-	port = flag.Int("P", 22, "port")
-	// password = flag.String("p", "", "password")
 )
 
 // func CreateConnection(pemPath, host string) *ssh.Client {
