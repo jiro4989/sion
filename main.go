@@ -4,34 +4,6 @@ import (
 	"github.com/jiro4989/sion/cli/command"
 )
 
-// func CreateConnection(pemPath, host string) *ssh.Client {
-// 	privateKey, err := ioutil.ReadFile(pemPath)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	signer, err := ssh.ParsePrivateKey(privateKey)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	config := &ssh.ClientConfig{
-// 		User: *user,
-// 		Auth: []ssh.AuthMethod{
-// 			// ssh.Password(*password),
-// 			ssh.PublicKeys(signer),
-// 		},
-// 		Timeout:         5 * time.Second,
-// 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-// 	}
-//
-// 	hostport := fmt.Sprintf("%s:%d", host, *port)
-// 	conn, err := ssh.Dial("tcp", hostport, config)
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "cannot connect %v: %v", hostport, err)
-// 		return nil
-// 	}
-// 	return conn
-// }
-
 // func sshrun(pemPath, host string, cmds []string) int {
 // 	conn := CreateConnection(pemPath, host)
 // 	defer conn.Close()
@@ -100,36 +72,3 @@ func main() {
 		panic(err)
 	}
 }
-
-func CopyFile() {
-	// ローカルのファイルとリモート先のファイルを比較
-	// 差分があった場合だけコピーを実行
-}
-
-// func Diff() bool {
-// 	// タイムスタンプのdiff
-// 	if !equalsTimestamp(inf, outf) {
-// 		return true
-// 	}
-// 	// 権限のdiff
-// 	if !equalsPermission(inf, outf) {
-// 		return true
-// 	}
-// 	// 所有者のdiff
-// 	if !equalsOwner(inf, outf) {
-// 		return true
-// 	}
-// 	// 所有グループのdiff
-// 	if !equalsGroup(inf, outf) {
-// 		return true
-// 	}
-// 	// ファイルのバイトサイズのdiff
-// 	if !equalsBytes(inf, outf) {
-// 		return true
-// 	}
-// 	// ファイル内容のdiff
-// 	if !equalsContents(inf, outf) {
-// 		return true
-// 	}
-// 	return false
-// }
