@@ -21,6 +21,31 @@ var cpCommand = &cobra.Command{
 	Short: "cp copies file to remote server",
 	Long:  "cp copies file to remote server",
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) < 2 {
+			// TODO output help
+			fmt.Println("argsたりない")
+			return
+		}
+		srcFilePath, dstFilePath := args[0], args[1]
+		fmt.Println(srcFilePath)
+
+		owner, err := cmd.Flags().GetString("owner")
+		if err != nil {
+			panic(err)
+		}
+		group, err := cmd.Flags().GetString("group")
+		if err != nil {
+			panic(err)
+		}
+		mode, err := cmd.Flags().GetString("mode")
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println("owner:", owner)
+		fmt.Println("group:", group)
+		fmt.Println("mode:", mode)
+
 		user := "ec2-user"
 
 		hostByte, err := ioutil.ReadFile("/home/jiro/host.txt")
@@ -53,13 +78,14 @@ var cpCommand = &cobra.Command{
 		}
 		defer conn.Close()
 
-		if err := remote.WithOpenFile(conn, "/home/ec2-user/tmpfile.txt", func(f *sftp.File) error {
+		if err := remote.WithOpenFile(conn, dstFilePath, func(f *sftp.File) error {
 			stat, err := f.Stat()
 			if err != nil {
+				fmt.Println(err)
 				panic(err)
 			}
 			fmt.Println("Stat:", stat)
-			fmt.Println("Mode:", stat.Mode())
+			fmt.Printf("Mode: %04o\n", stat.Mode())
 			fmt.Println("Size:", stat.Size())
 
 			uid := stat.Sys().(*sftp.FileStat).UID
@@ -70,12 +96,14 @@ var cpCommand = &cobra.Command{
 
 			uname, err := remote.FindUserName(conn, fmt.Sprintf("%d", uid))
 			if err != nil {
+				fmt.Println(err)
 				panic(err)
 			}
 			fmt.Println("Sys username:", uname)
 
 			gname, err := remote.FindGroupName(conn, fmt.Sprintf("%d", gid))
 			if err != nil {
+				fmt.Println(err)
 				panic(err)
 			}
 			fmt.Println("Sys groupname:", gname)
@@ -133,4 +161,7 @@ var cpCommand = &cobra.Command{
 
 func init() {
 	CommandCommand.AddCommand(cpCommand)
+	cpCommand.Flags().StringP("owner", "o", "", "owner of remote file")
+	cpCommand.Flags().StringP("group", "g", "", "group of remote file")
+	cpCommand.Flags().StringP("mode", "m", "", "mode of remote file")
 }
