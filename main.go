@@ -4,10 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -16,6 +18,65 @@ var (
 	port = flag.Int("P", 22, "port")
 	// password = flag.String("p", "", "password")
 )
+
+func sftpGet() int {
+	flag.Parse()
+	if flag.NArg() == 0 {
+		flag.Usage()
+		return 2
+	}
+
+	privateKey, err := ioutil.ReadFile(flag.Arg(0))
+	if err != nil {
+		panic(err)
+	}
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	if err != nil {
+		panic(err)
+	}
+	config := &ssh.ClientConfig{
+		User: *user,
+		Auth: []ssh.AuthMethod{
+			// ssh.Password(*password),
+			ssh.PublicKeys(signer),
+		},
+		Timeout:         5 * time.Second,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
+	hostport := fmt.Sprintf("%s:%d", flag.Arg(1), *port)
+	conn, err := ssh.Dial("tcp", hostport, config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cannot connect %v: %v", hostport, err)
+		return 1
+	}
+	defer conn.Close()
+
+	// open an SFTP session over an existing ssh connection.
+	sftp, err := sftp.NewClient(conn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer sftp.Close()
+
+	// Open the source file
+	srcFile, err := sftp.Open("/home/ec2-user/tmpfile.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer srcFile.Close()
+
+	// Create the destination file
+	dstFile, err := os.Create("tmpfile.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer dstFile.Close()
+
+	// Copy the file
+	srcFile.WriteTo(dstFile)
+	return 0
+}
 
 func sshrun() int {
 	flag.Parse()
@@ -140,7 +201,8 @@ func scp() int {
 
 func main() {
 	// os.Exit(sshrun())
-	os.Exit(scp())
+	// os.Exit(scp())
+	os.Exit(sftpGet())
 }
 
 func CopyFile() {
