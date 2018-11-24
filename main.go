@@ -19,14 +19,8 @@ var (
 	// password = flag.String("p", "", "password")
 )
 
-func sftpGet() int {
-	flag.Parse()
-	if flag.NArg() == 0 {
-		flag.Usage()
-		return 2
-	}
-
-	privateKey, err := ioutil.ReadFile(flag.Arg(0))
+func CreateConnection(pemPath, host string) *ssh.Client {
+	privateKey, err := ioutil.ReadFile(pemPath)
 	if err != nil {
 		panic(err)
 	}
@@ -44,12 +38,17 @@ func sftpGet() int {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	hostport := fmt.Sprintf("%s:%d", flag.Arg(1), *port)
+	hostport := fmt.Sprintf("%s:%d", host, *port)
 	conn, err := ssh.Dial("tcp", hostport, config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot connect %v: %v", hostport, err)
-		return 1
+		return nil
 	}
+	return conn
+}
+
+func sftpGet(pemPath, host string) int {
+	conn := CreateConnection(pemPath, host)
 	defer conn.Close()
 
 	// open an SFTP session over an existing ssh connection.
@@ -66,6 +65,13 @@ func sftpGet() int {
 	}
 	defer srcFile.Close()
 
+	stat, err := srcFile.Stat()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Stat:", stat)
+	fmt.Println("Mode:", stat.Mode())
+
 	// Create the destination file
 	dstFile, err := os.Create("tmpfile.txt")
 	if err != nil {
@@ -78,37 +84,8 @@ func sftpGet() int {
 	return 0
 }
 
-func sshrun() int {
-	flag.Parse()
-	if flag.NArg() == 0 {
-		flag.Usage()
-		return 2
-	}
-
-	privateKey, err := ioutil.ReadFile(flag.Arg(0))
-	if err != nil {
-		panic(err)
-	}
-	signer, err := ssh.ParsePrivateKey(privateKey)
-	if err != nil {
-		panic(err)
-	}
-	config := &ssh.ClientConfig{
-		User: *user,
-		Auth: []ssh.AuthMethod{
-			// ssh.Password(*password),
-			ssh.PublicKeys(signer),
-		},
-		Timeout:         5 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-
-	hostport := fmt.Sprintf("%s:%d", flag.Arg(1), *port)
-	conn, err := ssh.Dial("tcp", hostport, config)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cannot connect %v: %v", hostport, err)
-		return 1
-	}
+func sshrun(pemPath, host string, cmds []string) int {
+	conn := CreateConnection(pemPath, host)
 	defer conn.Close()
 
 	session, err := conn.NewSession()
@@ -126,7 +103,7 @@ func sshrun() int {
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
 	session.Stdin = os.Stdin
-	err = session.Run(strings.Join(flag.Args()[2:], " "))
+	err = session.Run(strings.Join(cmds, " "))
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		if ee, ok := err.(*ssh.ExitError); ok {
@@ -137,37 +114,8 @@ func sshrun() int {
 	return 0
 }
 
-func scp() int {
-	flag.Parse()
-	if flag.NArg() == 0 {
-		flag.Usage()
-		return 2
-	}
-
-	privateKey, err := ioutil.ReadFile(flag.Arg(0))
-	if err != nil {
-		panic(err)
-	}
-	signer, err := ssh.ParsePrivateKey(privateKey)
-	if err != nil {
-		panic(err)
-	}
-	config := &ssh.ClientConfig{
-		User: *user,
-		Auth: []ssh.AuthMethod{
-			// ssh.Password(*password),
-			ssh.PublicKeys(signer),
-		},
-		Timeout:         5 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-
-	hostport := fmt.Sprintf("%s:%d", flag.Arg(1), *port)
-	conn, err := ssh.Dial("tcp", hostport, config)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cannot connect %v: %v", hostport, err)
-		return 1
-	}
+func scp(pemPath, host string) int {
+	conn := CreateConnection(pemPath, host)
 	defer conn.Close()
 
 	session, err := conn.NewSession()
@@ -200,9 +148,23 @@ func scp() int {
 }
 
 func main() {
-	// os.Exit(sshrun())
-	// os.Exit(scp())
-	os.Exit(sftpGet())
+	flag.Parse()
+	if flag.NArg() == 0 {
+		flag.Usage()
+		return
+	}
+
+	var (
+		pemPath = flag.Arg(0)
+		host    = flag.Arg(1)
+		cmds    = flag.Args()[2:]
+	)
+
+	fmt.Println(pemPath, host, cmds)
+
+	// os.Exit(sshrun(pemPath, host, cmds))
+	// os.Exit(scp(pemPath, host))
+	os.Exit(sftpGet(pemPath, host))
 }
 
 func CopyFile() {
