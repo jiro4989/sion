@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/pkg/sftp"
@@ -54,7 +55,7 @@ func WithOpenFile(conn *ssh.Client, targetPath string, fn func(*sftp.File) error
 	}
 	defer sftp.Close()
 
-	f, err := sftp.Open(targetPath)
+	f, err := sftp.OpenFile(targetPath, os.O_RDWR|os.O_CREATE)
 	if err != nil {
 		return err
 	}

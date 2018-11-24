@@ -41,6 +41,7 @@ var cpCommand = &cobra.Command{
 		if err != nil {
 			panic(err)
 		}
+		fmt.Println(owner, group, mode)
 
 		user := "ec2-user"
 
@@ -84,6 +85,7 @@ var cpCommand = &cobra.Command{
 				gname    string
 				fb       []byte
 				srcBytes []byte
+				n        int
 			)
 
 			srcFile, err := os.Open(srcFilePath)
@@ -92,18 +94,9 @@ var cpCommand = &cobra.Command{
 			}
 			defer srcFile.Close()
 
-			// ファイルサイズで比較し、
-			// 一致しないなら後続の判定をスキップしてコピーを実行
 			stat, err := f.Stat()
 			if err != nil {
 				return err
-			}
-			srcStat, err := srcFile.Stat()
-			if err != nil {
-				return err
-			}
-			if stat.Size() != srcStat.Size() {
-				goto execopy
 			}
 
 			// ファイル内容で比較し、
@@ -116,6 +109,7 @@ var cpCommand = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			fmt.Println("seq:", string(fb) == string(srcBytes))
 			if !util.EqualBytes(fb, srcBytes) {
 				goto execopy
 			}
@@ -153,10 +147,32 @@ var cpCommand = &cobra.Command{
 				goto execopy
 			}
 
+			fmt.Println("Skipping...")
 			goto skipcopy
 
 		execopy:
 			fmt.Println("copying...")
+
+			err = f.Truncate(0)
+			if err != nil {
+				return err
+			}
+
+			n, err = f.Write(srcBytes)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				fmt.Println(n)
+				return errors.New("ファイル書き込みに失敗しました")
+			}
+
+			if err := f.Chmod(stat.Mode()); err != nil {
+				return err
+			}
+			if err := f.Chown(1000, 1000); err != nil {
+				return err
+			}
 
 		skipcopy:
 			return nil
