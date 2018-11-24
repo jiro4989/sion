@@ -47,40 +47,87 @@ func CreateConnection(pemPath, host string) *ssh.Client {
 	return conn
 }
 
+func GetRemoteFile(conn *ssh.Client, targetPath string) (*sftp.File, error) {
+	// open an SFTP session over an existing ssh connection.
+	sftp, err := sftp.NewClient(conn)
+	if err != nil {
+		return nil, err
+	}
+	// defer sftp.Close()
+
+	f, err := sftp.Open(targetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
+func WithOpenRemoteFile(conn *ssh.Client, targetPath string, fn func(*sftp.File) error) error {
+	sftp, err := sftp.NewClient(conn)
+	if err != nil {
+		return err
+	}
+	defer sftp.Close()
+
+	f, err := sftp.Open(targetPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return fn(f)
+}
+
+func EqualBytes(x, y []byte) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	for i := range x {
+		if x[i] != y[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func sftpGet(pemPath, host string) int {
 	conn := CreateConnection(pemPath, host)
 	defer conn.Close()
 
-	// open an SFTP session over an existing ssh connection.
-	sftp, err := sftp.NewClient(conn)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer sftp.Close()
+	WithOpenRemoteFile(conn, "/home/ec2-user/tmpfile.txt", func(f *sftp.File) error {
+		stat, err := f.Stat()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("Stat:", stat)
+		fmt.Println("Mode:", stat.Mode())
+		fmt.Println("Size:", stat.Size())
 
-	// Open the source file
-	srcFile, err := sftp.Open("/home/ec2-user/tmpfile.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer srcFile.Close()
+		var b = make([]byte, stat.Size())
+		f.Read(b)
 
-	stat, err := srcFile.Stat()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Stat:", stat)
-	fmt.Println("Mode:", stat.Mode())
+		bb, err := ioutil.ReadFile("hello.txt")
+		if err != nil {
+			return err
+		}
+		fmt.Println("remote byte :", b)
+		fmt.Println("local byte :", bb)
+		fmt.Println("same?: ", EqualBytes(b, bb))
 
-	// Create the destination file
-	dstFile, err := os.Create("tmpfile.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer dstFile.Close()
+		// Create the destination file
+		dstFile, err := os.Create("tmpfile.txt")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer dstFile.Close()
 
-	// Copy the file
-	srcFile.WriteTo(dstFile)
+		// Copy the file
+		f.WriteTo(dstFile)
+
+		return nil
+	})
+
 	return 0
 }
 
