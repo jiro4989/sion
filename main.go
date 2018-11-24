@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jiro4989/sion/cli/command"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
@@ -105,7 +107,13 @@ func sftpGet(pemPath, host string) int {
 		fmt.Println("Size:", stat.Size())
 
 		var b = make([]byte, stat.Size())
-		f.Read(b)
+		n, err := f.Read(b)
+		if n == 0 {
+			return errors.New("ファイル読み込みに失敗")
+		}
+		if err != nil {
+			return err
+		}
 
 		bb, err := ioutil.ReadFile("hello.txt")
 		if err != nil {
@@ -195,6 +203,11 @@ func scp(pemPath, host string) int {
 }
 
 func main() {
+	if err := command.RootCommand.Execute(); err != nil {
+		panic(err)
+	}
+	return
+
 	flag.Parse()
 	if flag.NArg() == 0 {
 		flag.Usage()
