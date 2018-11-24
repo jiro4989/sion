@@ -61,8 +61,24 @@ var cpCommand = &cobra.Command{
 			fmt.Println("Stat:", stat)
 			fmt.Println("Mode:", stat.Mode())
 			fmt.Println("Size:", stat.Size())
-			fmt.Println("Sys uid:", stat.Sys().(*sftp.FileStat).UID)
-			fmt.Println("Sys gid:", stat.Sys().(*sftp.FileStat).GID)
+
+			uid := stat.Sys().(*sftp.FileStat).UID
+			fmt.Println("Sys uid:", uid)
+
+			gid := stat.Sys().(*sftp.FileStat).GID
+			fmt.Println("Sys gid:", gid)
+
+			uname, err := remote.FindUserName(conn, fmt.Sprintf("%d", uid))
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("Sys username:", uname)
+
+			gname, err := remote.FindGroupName(conn, fmt.Sprintf("%d", gid))
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("Sys groupname:", gname)
 
 			var b = make([]byte, stat.Size())
 			n, err := f.Read(b)

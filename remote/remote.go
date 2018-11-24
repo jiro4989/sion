@@ -1,10 +1,18 @@
 package remote
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+)
+
+const (
+	groupFile = "/etc/group"
+	userFile  = "/etc/passwd"
 )
 
 type SSHConfig struct {
@@ -53,4 +61,53 @@ func WithOpenFile(conn *ssh.Client, targetPath string, fn func(*sftp.File) error
 	defer f.Close()
 
 	return fn(f)
+}
+
+func FindUserName(conn *ssh.Client, uid string) (string, error) {
+	sftp, err := sftp.NewClient(conn)
+	if err != nil {
+		return "", err
+	}
+	defer sftp.Close()
+
+	f, err := sftp.Open(userFile)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	return lookupId(f, uid)
+}
+
+// TODO ここ完全に使いまわしになっていてダサイ
+func FindGroupName(conn *ssh.Client, gid string) (string, error) {
+	sftp, err := sftp.NewClient(conn)
+	if err != nil {
+		return "", err
+	}
+	defer sftp.Close()
+
+	f, err := sftp.Open(groupFile)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	return lookupId(f, gid)
+}
+
+func lookupId(r io.Reader, id string) (string, error) {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := sc.Text()
+		cols := strings.Split(line, ":")
+		if len(cols) == 0 || strings.HasPrefix(strings.TrimSpace(cols[0]), "#") {
+			continue
+		}
+		userName, userId := cols[0], cols[2]
+		if userId == id {
+			return userName, nil
+		}
+	}
+	return "", sc.Err()
 }
