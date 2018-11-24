@@ -3,8 +3,8 @@ package command
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -42,10 +42,6 @@ var cpCommand = &cobra.Command{
 			panic(err)
 		}
 
-		fmt.Println("owner:", owner)
-		fmt.Println("group:", group)
-		fmt.Println("mode:", mode)
-
 		user := "ec2-user"
 
 		hostByte, err := ioutil.ReadFile("/home/jiro/host.txt")
@@ -79,79 +75,88 @@ var cpCommand = &cobra.Command{
 		defer conn.Close()
 
 		if err := remote.WithOpenFile(conn, dstFilePath, func(f *sftp.File) error {
+			var (
+				uid      uint32
+				gid      uint32
+				uname    string
+				gname    string
+				fb       []byte
+				srcBytes []byte
+			)
+
+			srcFile, err := os.Open(srcFilePath)
+			if err != nil {
+				return err
+			}
+			defer srcFile.Close()
+
+			// ファイルサイズで比較し、
+			// 一致しないなら後続の判定をスキップしてコピーを実行
 			stat, err := f.Stat()
 			if err != nil {
-				fmt.Println(err)
-				panic(err)
+				return err
 			}
-			fmt.Println("Stat:", stat)
-			fmt.Printf("Mode: %04o\n", stat.Mode())
-			fmt.Println("Size:", stat.Size())
-
-			uid := stat.Sys().(*sftp.FileStat).UID
-			fmt.Println("Sys uid:", uid)
-
-			gid := stat.Sys().(*sftp.FileStat).GID
-			fmt.Println("Sys gid:", gid)
-
-			uname, err := remote.FindUserName(conn, fmt.Sprintf("%d", uid))
-			if err != nil {
-				fmt.Println(err)
-				panic(err)
-			}
-			fmt.Println("Sys username:", uname)
-
-			gname, err := remote.FindGroupName(conn, fmt.Sprintf("%d", gid))
-			if err != nil {
-				fmt.Println(err)
-				panic(err)
-			}
-			fmt.Println("Sys groupname:", gname)
-
-			var b = make([]byte, stat.Size())
-			n, err := f.Read(b)
-			if n == 0 {
-				return errors.New("ファイル読み込みに失敗")
-			}
+			srcStat, err := srcFile.Stat()
 			if err != nil {
 				return err
 			}
+			if stat.Size() != srcStat.Size() {
+				goto execopy
+			}
 
-			of, err := os.Open("hello.txt")
+			// ファイル内容で比較し、
+			// 一致しないなら後続の判定をスキップしてコピーを実行
+			fb, err = getRemoteFileBytes(f)
 			if err != nil {
 				return err
 			}
-			defer of.Close()
-
-			oStat, err := of.Stat()
+			srcBytes, err = getFileBytes(srcFile)
 			if err != nil {
 				return err
 			}
-
-			var bb = make([]byte, oStat.Size())
-			n, err = of.Read(bb)
-			if n == 0 {
-				return errors.New("ファイル読み込みに失敗")
+			if !util.EqualBytes(fb, srcBytes) {
+				goto execopy
 			}
+
+			// 権限を比較し、
+			// 一致しないなら後続の判定をスキップしてコピーを実行
+			if m := fmt.Sprintf("%04o", stat.Mode()); m != mode {
+				goto execopy
+			}
+
+			/*
+				INFO: ここからはSFTPでユーザ、グループファイルを取得することにな
+				るので、ネットワーク遅延が速度に響く
+			*/
+
+			// 所有者を判定し、
+			// 一致しないなら後続の判定をスキップしてコピーを実行
+			uid = stat.Sys().(*sftp.FileStat).UID
+			uname, err = remote.FindUserName(conn, fmt.Sprintf("%d", uid))
 			if err != nil {
 				return err
 			}
-
-			fmt.Println("remote byte :", b)
-			fmt.Println("local byte :", bb)
-			fmt.Println("sameBytes?: ", util.EqualBytes(b, bb))
-			fmt.Println("samePerm?: ", stat.Mode() == oStat.Mode())
-
-			// Create the destination file
-			dstFile, err := os.Create("tmpfile.txt")
-			if err != nil {
-				log.Fatal(err)
+			if uname != owner {
+				goto execopy
 			}
-			defer dstFile.Close()
 
-			// Copy the file
-			f.WriteTo(dstFile)
+			// 所有グループを判定し、
+			// 一致しないなら後続の判定をスキップしてコピーを実行
+			gid = stat.Sys().(*sftp.FileStat).GID
+			gname, err = remote.FindGroupName(conn, fmt.Sprintf("%d", gid))
+			if err != nil {
+				return err
+			}
+			if gname != group {
+				goto execopy
+			}
 
+			goto skipcopy
+
+		execopy:
+			fmt.Println("copying...")
+
+		skipcopy:
 			return nil
 		}); err != nil {
 			panic(err)
@@ -164,4 +169,35 @@ func init() {
 	cpCommand.Flags().StringP("owner", "o", "", "owner of remote file")
 	cpCommand.Flags().StringP("group", "g", "", "group of remote file")
 	cpCommand.Flags().StringP("mode", "m", "", "mode of remote file")
+}
+
+// TODO 抽象化
+func getRemoteFileBytes(f *sftp.File) ([]byte, error) {
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return readByte(f, stat.Size())
+}
+
+// TODO 抽象化
+func getFileBytes(f *os.File) ([]byte, error) {
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return readByte(f, stat.Size())
+}
+
+func readByte(f io.Reader, size int64) ([]byte, error) {
+	var b = make([]byte, size)
+	n, err := f.Read(b)
+	if n == 0 {
+		return nil, errors.New("ファイル読み込みに失敗")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
