@@ -79,7 +79,7 @@ func FindUserName(conn *ssh.Client, uid string) (string, error) {
 	return lookupId(f, uid)
 }
 
-// TODO ここ完全に使いまわしになっていてダサイ
+// TODO コピペがださい
 func FindGroupName(conn *ssh.Client, gid string) (string, error) {
 	sftp, err := sftp.NewClient(conn)
 	if err != nil {
