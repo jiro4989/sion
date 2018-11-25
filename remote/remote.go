@@ -64,39 +64,6 @@ func WithOpenFile(conn *ssh.Client, targetPath string, fn func(*sftp.File) (inte
 	return fn(f)
 }
 
-func FindUserName(conn *ssh.Client, uid string) (string, error) {
-	sftp, err := sftp.NewClient(conn)
-	if err != nil {
-		return "", err
-	}
-	defer sftp.Close()
-
-	f, err := sftp.Open(userFile)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	return lookupId(f, uid)
-}
-
-// TODO コピペがださい
-func FindGroupName(conn *ssh.Client, gid string) (string, error) {
-	sftp, err := sftp.NewClient(conn)
-	if err != nil {
-		return "", err
-	}
-	defer sftp.Close()
-
-	f, err := sftp.Open(groupFile)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	return lookupId(f, gid)
-}
-
 func fetchHash(conn *ssh.Client, fp string) (map[string]string, error) {
 	sftp, err := sftp.NewClient(conn)
 	if err != nil {
@@ -134,20 +101,4 @@ func convertColonTableToHash(r io.Reader) (map[string]string, error) {
 		m[id] = v
 	}
 	return m, sc.Err()
-}
-
-func lookupId(r io.Reader, id string) (string, error) {
-	sc := bufio.NewScanner(r)
-	for sc.Scan() {
-		line := sc.Text()
-		cols := strings.Split(line, ":")
-		if len(cols) == 0 || strings.HasPrefix(strings.TrimSpace(cols[0]), "#") {
-			continue
-		}
-		userName, userId := cols[0], cols[2]
-		if userId == id {
-			return userName, nil
-		}
-	}
-	return "", sc.Err()
 }
