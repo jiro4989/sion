@@ -48,16 +48,16 @@ func CreateConnection(config *SSHConfig) (*ssh.Client, error) {
 	return conn, nil
 }
 
-func WithOpenFile(conn *ssh.Client, targetPath string, fn func(*sftp.File) error) error {
+func WithOpenFile(conn *ssh.Client, targetPath string, fn func(*sftp.File) (interface{}, error)) (interface{}, error) {
 	sftp, err := sftp.NewClient(conn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer sftp.Close()
 
 	f, err := sftp.OpenFile(targetPath, os.O_RDWR|os.O_CREATE)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 

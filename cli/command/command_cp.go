@@ -1,7 +1,6 @@
 package command
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -75,7 +74,8 @@ var cpCommand = &cobra.Command{
 		}
 		defer conn.Close()
 
-		if err := remote.WithOpenFile(conn, dstFilePath, func(f *sftp.File) error {
+		// リモート先のファイルに差分があるかを判定
+		hasDiff, err := remote.WithOpenFile(conn, dstFilePath, func(f *sftp.File) (interface{}, error) {
 			// gotoでスキップされる間に初めて宣言される変数が存在するとコンパイ
 			// ルエラーになるため、不本意ながらも先頭にまとめて変数宣言
 			var (
@@ -85,29 +85,48 @@ var cpCommand = &cobra.Command{
 				gname    string
 				fb       []byte
 				srcBytes []byte
-				n        int
+				// n        int
 			)
 
 			srcFile, err := os.Open(srcFilePath)
 			if err != nil {
-				return err
+				return false, err
 			}
 			defer srcFile.Close()
 
+			// ファイルサイズで比較し、
+			// 一致しないなら後続の判定をスキップしてコピーを実行
 			stat, err := f.Stat()
 			if err != nil {
-				return err
+				return false, err
+			}
+			srcStat, err := srcFile.Stat()
+			if err != nil {
+				return false, err
+			}
+			if stat.Size() != srcStat.Size() {
+				fmt.Println("stat:size", stat.Size())
+				fmt.Println("srcstat:size", srcStat.Size())
+				fb, err = getRemoteFileBytes(f)
+				if err != nil {
+					return false, err
+				}
+				srcBytes, err = getFileBytes(srcFile)
+				if err != nil {
+					return false, err
+				}
+				goto execopy
 			}
 
 			// ファイル内容で比較し、
 			// 一致しないなら後続の判定をスキップしてコピーを実行
 			fb, err = getRemoteFileBytes(f)
 			if err != nil {
-				return err
+				return false, err
 			}
 			srcBytes, err = getFileBytes(srcFile)
 			if err != nil {
-				return err
+				return false, err
 			}
 			fmt.Println("seq:", string(fb) == string(srcBytes))
 			if !util.EqualBytes(fb, srcBytes) {
@@ -130,7 +149,7 @@ var cpCommand = &cobra.Command{
 			uid = stat.Sys().(*sftp.FileStat).UID
 			uname, err = remote.FindUserName(conn, fmt.Sprintf("%d", uid))
 			if err != nil {
-				return err
+				return false, err
 			}
 			if uname != owner {
 				goto execopy
@@ -141,43 +160,65 @@ var cpCommand = &cobra.Command{
 			gid = stat.Sys().(*sftp.FileStat).GID
 			gname, err = remote.FindGroupName(conn, fmt.Sprintf("%d", gid))
 			if err != nil {
-				return err
+				return false, err
 			}
 			if gname != group {
 				goto execopy
 			}
 
-			fmt.Println("Skipping...")
-			goto skipcopy
+			return false, nil
 
 		execopy:
-			fmt.Println("copying...")
-
+			// ファイルの中身をからにする
 			err = f.Truncate(0)
 			if err != nil {
-				return err
+				return false, err
 			}
-
-			n, err = f.Write(srcBytes)
-			if err != nil {
-				return err
-			}
-			if n == 0 {
-				fmt.Println(n)
-				return errors.New("ファイル書き込みに失敗しました")
-			}
-
-			if err := f.Chmod(stat.Mode()); err != nil {
-				return err
-			}
-			if err := f.Chown(1000, 1000); err != nil {
-				return err
-			}
-
-		skipcopy:
-			return nil
-		}); err != nil {
+			return true, nil
+		})
+		if err != nil {
 			panic(err)
+		}
+
+		if b, ok := hasDiff.(bool); ok {
+			fmt.Println("型キャスト成功")
+			if b {
+				fmt.Println("差分あり")
+				_, err := remote.WithOpenFile(conn, dstFilePath, func(f *sftp.File) (interface{}, error) {
+					srcFile, err := os.Open(srcFilePath)
+					if err != nil {
+						return false, err
+					}
+					defer srcFile.Close()
+
+					srcBytes, err := getFileBytes(srcFile)
+					if err != nil {
+						return false, err
+					}
+					_, err = f.Write(srcBytes)
+					if err != nil {
+						return false, err
+					}
+
+					// TODO
+					stat, err := f.Stat()
+					if err != nil {
+						return false, nil
+					}
+					if err := f.Chmod(stat.Mode()); err != nil {
+						return false, err
+					}
+					// TODO
+					if err := f.Chown(1000, 1000); err != nil {
+						return false, err
+					}
+
+					return true, nil
+				})
+				if err != nil {
+					panic(err)
+				}
+			}
 		}
 	},
 }
@@ -209,13 +250,13 @@ func getFileBytes(f *os.File) ([]byte, error) {
 
 func readByte(f io.Reader, size int64) ([]byte, error) {
 	var b = make([]byte, size)
-	n, err := f.Read(b)
-	if n == 0 {
-		return nil, errors.New("ファイル読み込みに失敗")
-	}
+	_, err := f.Read(b)
 	if err != nil {
 		return nil, err
 	}
+	// if n == 0 {
+	// 	return nil, errors.New("ファイル読み込みに失敗")
+	// }
 
 	return b, nil
 }
