@@ -74,6 +74,18 @@ var cpCommand = &cobra.Command{
 		}
 		defer conn.Close()
 
+		// ユーザ一覧の取得
+		users, err := remote.FetchUsers(conn)
+		if err != nil {
+			panic(err)
+		}
+
+		// グループ一覧の取得
+		groups, err := remote.FetchGroups(conn)
+		if err != nil {
+			panic(err)
+		}
+
 		// リモート先のファイルに差分があるかを判定
 		hasDiff, err := remote.WithOpenFile(conn, dstFilePath, func(f *sftp.File) (interface{}, error) {
 			// gotoでスキップされる間に初めて宣言される変数が存在するとコンパイ
@@ -147,10 +159,7 @@ var cpCommand = &cobra.Command{
 			// 所有者を判定し、
 			// 一致しないなら後続の判定をスキップしてコピーを実行
 			uid = stat.Sys().(*sftp.FileStat).UID
-			uname, err = remote.FindUserName(conn, fmt.Sprintf("%d", uid))
-			if err != nil {
-				return false, err
-			}
+			uname = users[fmt.Sprintf("%d", uid)]
 			if uname != owner {
 				goto execopy
 			}
@@ -158,10 +167,7 @@ var cpCommand = &cobra.Command{
 			// 所有グループを判定し、
 			// 一致しないなら後続の判定をスキップしてコピーを実行
 			gid = stat.Sys().(*sftp.FileStat).GID
-			gname, err = remote.FindGroupName(conn, fmt.Sprintf("%d", gid))
-			if err != nil {
-				return false, err
-			}
+			gname = groups[fmt.Sprintf("%d", gid)]
 			if gname != group {
 				goto execopy
 			}

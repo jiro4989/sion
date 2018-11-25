@@ -97,6 +97,45 @@ func FindGroupName(conn *ssh.Client, gid string) (string, error) {
 	return lookupId(f, gid)
 }
 
+func fetchHash(conn *ssh.Client, fp string) (map[string]string, error) {
+	sftp, err := sftp.NewClient(conn)
+	if err != nil {
+		return nil, err
+	}
+	defer sftp.Close()
+
+	f, err := sftp.Open(fp)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	return convertColonTableToHash(f)
+}
+
+func FetchUsers(conn *ssh.Client) (map[string]string, error) {
+	return fetchHash(conn, userFile)
+}
+
+func FetchGroups(conn *ssh.Client) (map[string]string, error) {
+	return fetchHash(conn, groupFile)
+}
+
+func convertColonTableToHash(r io.Reader) (map[string]string, error) {
+	sc := bufio.NewScanner(r)
+	m := make(map[string]string)
+	for sc.Scan() {
+		line := sc.Text()
+		cols := strings.Split(line, ":")
+		if len(cols) == 0 || strings.HasPrefix(strings.TrimSpace(cols[0]), "#") {
+			continue
+		}
+		v, id := cols[0], cols[2]
+		m[id] = v
+	}
+	return m, sc.Err()
+}
+
 func lookupId(r io.Reader, id string) (string, error) {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
