@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -175,6 +176,7 @@ var cpCommand = &cobra.Command{
 			return false, nil
 
 		execopy:
+			fmt.Println("truncate...")
 			// ファイルの中身をからにする
 			err = f.Truncate(0)
 			if err != nil {
@@ -187,9 +189,8 @@ var cpCommand = &cobra.Command{
 		}
 
 		if b, ok := hasDiff.(bool); ok {
-			fmt.Println("型キャスト成功")
 			if b {
-				fmt.Println("差分あり")
+				fmt.Println("copying...")
 				_, err := remote.WithOpenFile(conn, dstFilePath, func(f *sftp.File) (interface{}, error) {
 					srcFile, err := os.Open(srcFilePath)
 					if err != nil {
@@ -214,8 +215,30 @@ var cpCommand = &cobra.Command{
 					if err := f.Chmod(stat.Mode()); err != nil {
 						return false, err
 					}
-					// TODO
-					if err := f.Chown(1000, 1000); err != nil {
+
+					var uid int
+					for k, v := range users {
+						if v == owner {
+							var err error
+							uid, err = strconv.Atoi(k)
+							if err != nil {
+								return false, err
+							}
+						}
+					}
+
+					var gid int
+					for k, v := range groups {
+						if v == owner {
+							var err error
+							gid, err = strconv.Atoi(k)
+							if err != nil {
+								return false, err
+							}
+						}
+					}
+
+					if err := f.Chown(uid, gid); err != nil {
 						return false, err
 					}
 
