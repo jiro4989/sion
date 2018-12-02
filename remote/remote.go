@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jiro4989/sion/util"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
@@ -101,4 +102,79 @@ func convertColonTableToHash(r io.Reader) (map[string]string, error) {
 		m[id] = v
 	}
 	return m, sc.Err()
+}
+
+func HasDiff(conn *ssh.Client, srcFilePath, dstFilePath, owner, group, mode string, users, groups map[string]string) (bool, error) {
+	hasDiff, err := WithOpenFile(conn, dstFilePath, func(f *sftp.File) (interface{}, error) {
+		srcFile, err := os.Open(srcFilePath)
+		if err != nil {
+			return false, err
+		}
+		defer srcFile.Close()
+
+		// ファイルサイズで比較し、
+		// 一致しないなら後続の判定をスキップしてコピーを実行
+		stat, err := f.Stat()
+		if err != nil {
+			return false, err
+		}
+		srcStat, err := srcFile.Stat()
+		if err != nil {
+			return false, err
+		}
+		if stat.Size() != srcStat.Size() {
+			return true, nil
+		}
+
+		// ファイル内容で比較し、
+		// 一致しないなら後続の判定をスキップしてコピーを実行
+		fb, err := GetFileBytes(f)
+		if err != nil {
+			return false, err
+		}
+		srcBytes, err := util.GetFileBytes(srcFile)
+		if err != nil {
+			return false, err
+		}
+		fmt.Println("seq:", string(fb) == string(srcBytes))
+		if !util.EqualBytes(fb, srcBytes) {
+			return true, nil
+		}
+
+		// 権限を比較し、
+		// 一致しないなら後続の判定をスキップしてコピーを実行
+		if m := fmt.Sprintf("%04o", stat.Mode()); m != mode {
+			return true, nil
+		}
+
+		// 所有者を判定し、
+		// 一致しないなら後続の判定をスキップしてコピーを実行
+		uid := stat.Sys().(*sftp.FileStat).UID
+		uname := users[fmt.Sprintf("%d", uid)]
+		if uname != owner {
+			return true, nil
+		}
+
+		// 所有グループを判定し、
+		// 一致しないなら後続の判定をスキップしてコピーを実行
+		gid := stat.Sys().(*sftp.FileStat).GID
+		gname := groups[fmt.Sprintf("%d", gid)]
+		if gname != group {
+			return true, nil
+		}
+
+		return false, nil
+	})
+	if b, ok := hasDiff.(bool); ok {
+		return b, err
+	}
+	return false, err
+}
+
+func GetFileBytes(f *sftp.File) ([]byte, error) {
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return util.ReadByte(f, stat.Size())
 }
