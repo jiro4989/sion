@@ -178,3 +178,47 @@ func GetFileBytes(f *sftp.File) ([]byte, error) {
 	}
 	return util.ReadByte(f, stat.Size())
 }
+
+func Chmod(conn *ssh.Client, mode, path string) error {
+	session, err := conn.NewSession()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cannot open new session: %v", err)
+		return err
+	}
+	defer session.Close()
+
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
+	session.Stdin = os.Stdin
+	if err = session.Run(fmt.Sprintf("chmod %s %s", mode, path)); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		if ee, ok := err.(*ssh.ExitError); ok {
+			return ee
+		}
+		return err
+	}
+
+	return nil
+}
+
+func Chown(conn *ssh.Client, owner, group, path string) error {
+	session, err := conn.NewSession()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cannot open new session: %v", err)
+		return err
+	}
+	defer session.Close()
+
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
+	session.Stdin = os.Stdin
+	if err = session.Run(fmt.Sprintf("chown %s:%s %s", owner, group, path)); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		if ee, ok := err.(*ssh.ExitError); ok {
+			return ee
+		}
+		return err
+	}
+
+	return nil
+}
